@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#080d1d" />
+  <title>UserStore â€” Username Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="ambient ambient-one"></div><div class="ambient ambient-two"></div>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">âœ¦</div>
+        <div><strong>User<span>Store</span></strong><small>My Accounts & Usernames</small></div>
+      </div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="dashboard"><span>âŒ‚</span> Bosh sahifa</button>
+        <button class="nav-item" data-view="inventory"><span>â—‡</span> Usernamelar <b id="navCount">0</b></button>
+        <button class="nav-item" data-view="sold"><span>ðŸ›’</span> Sotilganlar</button>
+        <button class="nav-item" data-view="stats"><span>â–¥</span> Statistika</button>
+        <button class="nav-item" data-view="backup"><span>â–¤</span> Zaxira / Tiklash</button>
+      </nav>
+      <div class="sidebar-note">
+        <div class="note-icon">â™›</div>
+        <strong>Mayda nazorat</strong>
+        <p>Kichik nazorat katta foyda olib keladi.</p>
+        <div class="note-line"></div>
+        <small>Ma'lumotlar shu qurilmada saqlanadi</small>
+      </div>
+      <div class="sidebar-footer"><span class="online-dot"></span> Offline-first â€¢ Local storage</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="mobile-menu icon-btn" id="mobileMenu" aria-label="Menyu">â˜°</button>
+        <div>
+          <div class="eyebrow">SHAXSIY BOSHQARUV PANELI</div>
+          <h1 id="pageTitle">Xush kelibsan! <span class="wave">ðŸ‘‹</span></h1>
+          <p id="pageSubtitle">Barcha username va akkauntlaringni bir joyda boshqar.</p>
+        </div>
+        <div class="top-actions">
+          <label class="global-search"><span>âŒ•</span><input id="globalSearch" placeholder="Username qidirish..." /><kbd>Ctrl K</kbd></label>
+          <button class="icon-btn" id="themeBtn" title="Rang rejimini almashtirish">â˜¾</button>
+          <button class="avatar" title="UserStore">U</button>
+        </div>
+      </header>
+
+      <section class="stats-grid" id="statsGrid">
+        <article class="stat-card blue"><div class="stat-icon">â™™</div><div><span>Jami userlar</span><strong id="totalCount">0 <small>ta</small></strong><p>Barcha username'lar</p></div><div class="stat-glow"></div></article>
+        <article class="stat-card green"><div class="stat-icon">ðŸ›’</div><div><span>Sotuvda</span><strong id="forSaleCount">0 <small>ta</small></strong><p>Hozir sotuvda turganlar</p></div><div class="stat-glow"></div></article>
+        <article class="stat-card purple"><div class="stat-icon">âœ“</div><div><span>Sotilganlar</span><strong id="soldCount">0 <small>ta</small></strong><p>Yakunlangan sotuvlar</p></div><div class="stat-glow"></div></article>
+        <article class="stat-card pink"><div class="stat-icon">â–±</div><div><span>Umumiy foyda</span><strong id="totalProfit">0 <small>so'm</small></strong><p>Sotuvlardan sof natija</p></div><div class="stat-glow"></div></article>
+      </section>
+
+      <section class="view active" id="dashboardView">
+        <div class="section-heading">
+          <div class="heading-icon">â—‡</div><div><h2>Username inventari</h2><p>Aktivlaringni kuzat, narxlarni yangila va sotuvlarni qayd et.</p></div>
+          <button class="primary-btn" id="addBtn"><span>ï¼‹</span> Yangi qo'shish</button>
+        </div>
+        <div class="toolbar">
+          <label class="search-field"><span>âŒ•</span><input id="searchInput" placeholder="Username yoki izoh bo'yicha qidirish..." /></label>
+          <select id="statusFilter" aria-label="Holat filtri"><option value="all">Barcha holat</option><option value="saved">Saqlanmoqda</option><option value="sale">Sotuvda</option><option value="sold">Sotilgan</option></select>
+          <select id="typeFilter" aria-label="Tur filtri"><option value="all">Barcha tur</option><option value="ordinary">Oddiy</option><option value="collectible">Collectible</option><option value="account">Akkaunt</option><option value="other">Boshqa</option></select>
+          <button class="subtle-btn" id="clearFilters">Tozalash</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th class="check-col"><input type="checkbox" id="selectAll" aria-label="Hammasini tanlash"></th><th>Username / Nomi</th><th>Turi</th><th>Holati</th><th>Xarid narxi</th><th>Sotuv narxi</th><th>Sotilgan narxi</th><th>Foyda</th><th>Amallar</th></tr></thead>
+            <tbody id="itemsBody"></tbody>
+          </table>
+          <div class="empty-state" id="emptyState"><div class="empty-orb">â—‡</div><h3>Hozircha ro'yxat bo'sh</h3><p>Birinchi username yoki akkauntingni qo'shishdan boshla.</p><button class="primary-btn" id="emptyAddBtn">ï¼‹ Birinchi userni qo'shish</button></div>
+        </div>
+        <div class="table-footer"><span id="resultsCount">0 ta yozuv</span><div class="footer-actions"><button class="subtle-btn danger-text" id="deleteSelected" disabled>Tanlanganlarni o'chirish</button><span class="local-badge"><i></i> Avtomatik saqlanadi</span></div></div>
+      </section>
+
+      <section class="view" id="soldView">
+        <div class="section-heading"><div class="heading-icon">âœ“</div><div><h2>Sotilganlar tarixi</h2><p>Yakunlangan savdolar va tushgan mablag'lar.</p></div></div>
+        <div class="sold-summary" id="soldSummary"></div>
+        <div class="table-wrap"><table><thead><tr><th>Username / Nomi</th><th>Sotilgan sana</th><th>Xarid narxi</th><th>Sotilgan narxi</th><th>Foyda / zarar</th><th>Amallar</th></tr></thead><tbody id="soldBody"></tbody></table>
+        <div class="empty-state compact" id="soldEmpty"><div class="empty-orb">âœ“</div><h3>Hali sotuv qayd etilmagan</h3><p>Username'ni sotilganda belgilasang, bu yerda ko'rinadi.</p></div></div>
+      </section>
+
+      <section class="view" id="statsView">
+        <div class="section-heading"><div class="heading-icon">â–¥</div><div><h2>Statistika</h2><p>Inventaring va savdolaring bo'yicha qisqa hisobot.</p></div></div>
+        <div class="analytics-grid">
+          <article class="panel"><h3>Inventar holati</h3><div id="statusBreakdown" class="breakdown"></div></article>
+          <article class="panel"><h3>Moliyaviy ko'rsatkichlar</h3><div id="financeBreakdown" class="finance-list"></div></article>
+          <article class="panel wide"><h3>Oxirgi faoliyat</h3><div id="activityList" class="activity-list"></div></article>
+        </div>
+      </section>
+
+      <section class="view" id="backupView">
+        <div class="section-heading"><div class="heading-icon">â–¤</div><div><h2>Zaxira va tiklash</h2><p>Ma'lumotlaringni yo'qotmaslik uchun nusxa ol.</p></div></div>
+        <div class="backup-grid">
+          <article class="panel backup-card"><div class="backup-icon">â†§</div><h3>Zaxira nusxa olish</h3><p>Barcha username, narx, holat va tarix ma'lumotlarini JSON faylga saqla.</p><button class="primary-btn" id="exportBtn">JSON yuklab olish</button></article>
+          <article class="panel backup-card"><div class="backup-icon">â†¥</div><h3>Zaxirani tiklash</h3><p>Oldin saqlagan JSON faylingni tanlab, ma'lumotlarni qayta tikla.</p><label class="secondary-btn file-label">Fayl tanlash<input type="file" id="importFile" accept=".json,application/json" hidden></label></article>
+          <article class="panel backup-card warning-card"><div class="backup-icon">!</div><h3>Barcha ma'lumotlarni tozalash</h3><p>Bu amal qaytarilmaydi. Avval zaxira nusxa olishingni tavsiya qilamiz.</p><button class="secondary-btn danger-btn" id="resetBtn">Hammasini o'chirish</button></article>
+        </div>
+        <div class="info-banner"><span>â“˜</span><div><strong>Muhim</strong><p>Bu versiya server ishlatmaydi. Ma'lumotlar faqat shu brauzer va qurilmada saqlanadi. Brauzer ma'lumotlarini tozalashdan oldin JSON zaxira ol.</p></div></div>
+      </section>
+      <footer class="main-footer"><span>USERSTORE <b>â€¢</b> PERSONAL INVENTORY</span><span>Built for your own workflow <span class="footer-heart">â™¥</span></span></footer>
+    </main>
+  </div>
+
+  <dialog id="itemDialog" class="modal">
+    <form id="itemForm" method="dialog">
+      <div class="modal-head"><div><span class="eyebrow">INVENTAR BOSHQARUVI</span><h2 id="dialogTitle">Yangi username</h2></div><button type="button" class="icon-btn close-btn" id="closeDialog">Ã—</button></div>
+      <input type="hidden" id="itemId">
+      <div class="form-grid">
+        <label class="full">Username yoki nomi <input id="username" required maxlength="80" placeholder="@username yoki akkaunt nomi"></label>
+        <label>Turi<select id="itemType"><option value="ordinary">Oddiy username</option><option value="collectible">Collectible</option><option value="account">Akkaunt</option><option value="other">Boshqa</option></select></label>
+        <label>Holati<select id="itemStatus"><option value="saved">Saqlanmoqda</option><option value="sale">Sotuvda</option><option value="sold">Sotilgan</option></select></label>
+        <label>Xarid narxi (so'm)<input id="buyPrice" type="number" min="0" step="1000" value="0" inputmode="numeric"></label>
+        <label>Sotuv narxi (so'm)<input id="askPrice" type="number" min="0" step="1000" value="0" inputmode="numeric"></label>
+        <label id="soldPriceWrap">Sotilgan narxi (so'm)<input id="soldPrice" type="number" min="0" step="1000" value="0" inputmode="numeric"></label>
+        <label id="soldDateWrap">Sotilgan sana<input id="soldDate" type="date"></label>
+        <label class="full">Izoh <textarea id="itemNote" rows="3" maxlength="500" placeholder="Qo'shimcha ma'lumot..."></textarea></label>
+      </div>
+      <div class="modal-hint">Narxlar so'mda kiritiladi. Foyda avtomatik hisoblanadi.</div>
+      <div class="modal-actions"><button type="button" class="secondary-btn" id="cancelDialog">Bekor qilish</button><button type="submit" class="primary-btn">Saqlash <span>â†—</span></button></div>
+    </form>
+  </dialog>
+
+  <dialog id="sellDialog" class="modal small-modal">
+    <form id="sellForm" method="dialog">
+      <div class="modal-head"><div><span class="eyebrow">SOTUVNI YAKUNLASH</span><h2>Username sotildi</h2></div><button type="button" class="icon-btn close-btn" id="closeSellDialog">Ã—</button></div>
+      <input type="hidden" id="sellId">
+      <div class="sell-item" id="sellItemName"></div>
+      <label>Sotilgan narxi (so'm)<input id="sellPrice" type="number" min="0" required step="1000" inputmode="numeric" placeholder="Masalan: 150000"></label>
+      <label>Sotilgan sana<input id="sellDate" type="date" required></label>
+      <div class="profit-preview" id="profitPreview">Foyda: 0 so'm</div>
+      <div class="modal-actions"><button type="button" class="secondary-btn" id="cancelSell">Bekor qilish</button><button type="submit" class="primary-btn">Sotuvni tasdiqlash âœ“</button></div>
+    </form>
+  </dialog>
+  <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
