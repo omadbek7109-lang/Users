@@ -1,0 +1,24 @@
+# Dependencies & build
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.session
+session*.json
+credentials*.json
+supabase/.temp/
+supabase/.branches/
+
+# Logs & OS
+*.log
+npm-debug.log*
+.DS_Store
+.idea/
+.vscode/

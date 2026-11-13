@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main, personal-telegram-ai]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Secret scan (no tokens/keys committed)
+        run: |
+          if grep -rEn --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=tests \
+              '([0-9]{8,10}:AA[A-Za-z0-9_-]{30,})|(sk-ant-[A-Za-z0-9_-]{20,})|(sk-proj-[A-Za-z0-9_-]{20,})|(eyJ[A-Za-z0-9_-]{20,}\.eyJ[A-Za-z0-9_-]{20,}\.)' . ; then
+            echo "::error::Possible secret found in repository"; exit 1
+          fi
+          if git ls-files | grep -E '(^|/)\.env$'; then echo "::error::.env is committed"; exit 1; fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
