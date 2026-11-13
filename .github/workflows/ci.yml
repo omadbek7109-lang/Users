@@ -30,3 +30,19 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+      - name: Installed dependency versions
+        run: npm ls --depth=0
+
+      - name: Official Bot API docs for methods used (from @grammyjs/types)
+        run: >
+          node scripts/print-api-docs.mjs postStory editStory deleteStory InputStoryContentPhoto InputStoryContentVideo
+          deleteMessage deleteMessages deleteBusinessMessages getBusinessConnection BusinessConnection BusinessBotRights
+          getFile sendPhoto ChatMemberAdministrator InlineKeyboardButton CopyTextButton getChatMember Story > api-docs.txt; cat api-docs.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: audit
+          path: |
+            package-lock.json
+            api-docs.txt
