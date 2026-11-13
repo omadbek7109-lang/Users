@@ -112,10 +112,9 @@ export async function handlePrivateMessage(c: BotContext, m: TgMessage): Promise
     return;
   }
   if (state.kind === 'story_edit_caption') {
-    await c.send(chatId, '⏳ Story yangilanmoqda…');
-    const row = await c.d.stories.editCaption(owner, state.storyId, text === '-' ? '' : text);
+    await c.d.stories.requestCaptionEdit(owner, state.storyId, text === '-' ? '' : text);
     await c.d.state.clear(c.d.ownerId);
-    await c.send(chatId, '✅ Story caption yangilandi.', storyActionsKeyboard(row.id, row.status));
+    await c.send(chatId, '⏳ Story yangilanmoqda (media qayta yuklanadi). Tayyor bo‘lgach xabar beraman.');
     return;
   }
   if (state.kind === 'media_draft' && state.awaiting === 'caption') {

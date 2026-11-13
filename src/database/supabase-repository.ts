@@ -46,11 +46,11 @@ export class SupabaseRepository implements Repository {
   }
 
   async ensureUser(telegramId: number, username?: string | null, firstName?: string | null): Promise<UserRow> {
-    const res = await this.db
-      .from('users')
-      .upsert({ telegram_id: telegramId, username: username ?? null, first_name: firstName ?? null }, { onConflict: 'telegram_id' })
-      .select()
-      .single();
+    // Only overwrite profile fields that were actually provided.
+    const row: Record<string, unknown> = { telegram_id: telegramId };
+    if (username !== undefined) row.username = username;
+    if (firstName !== undefined) row.first_name = firstName;
+    const res = await this.db.from('users').upsert(row, { onConflict: 'telegram_id' }).select().single();
     return must('ensureUser', res) as UserRow;
   }
   async getUserByTelegramId(telegramId: number) {

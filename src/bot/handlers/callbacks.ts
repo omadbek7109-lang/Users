@@ -2,7 +2,7 @@ import type { BotContext } from '../context.js';
 import type { TgCallbackQuery } from '../../types/telegram.js';
 import {
   aiOperationsKeyboard, aiResultKeyboard, aiTranslateKeyboard, confirmKeyboard, mediaDraftKeyboard, mediaTargetsKeyboard,
-  storyActionsKeyboard, storyDraftKeyboard,
+  storyDraftKeyboard,
 } from '../keyboards/index.js';
 import { mediaDraftText, settingsScreen, storyDraftText, tasksScreen } from './screens.js';
 import { storyDraftFromMedia } from './private.js';
@@ -92,11 +92,12 @@ export async function handleCallback(c: BotContext, q: TgCallbackQuery): Promise
           return;
         }
         if (action === 'now') {
-          await answer('Joylanmoqda…');
-          if (msgId) await c.edit(chatId, msgId, `${storyDraftText(d)}\n\n⏳ Joylanmoqda…`, undefined, true);
-          const row = await c.d.stories.postNow(owner, d);
+          await c.d.stories.postNow(owner, d);
           await c.d.state.clear(c.d.ownerId);
-          await c.send(chatId, `✅ Story joylandi!\n${c.d.stories.describe(row, c.fmt)}`, storyActionsKeyboard(row.id, row.status));
+          await answer('Navbatga qo‘yildi');
+          if (msgId) {
+            await c.edit(chatId, msgId, `${storyDraftText(d)}\n\n⏳ Media story formatiga o‘tkazilmoqda va joylanmoqda. Tayyor bo‘lgach xabar beraman.`, undefined, true);
+          }
           return;
         }
         await c.d.state.set(c.d.ownerId, { kind: 'story_draft', draft: d });

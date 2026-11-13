@@ -5,6 +5,7 @@ import { MemoryStateStore } from '../src/services/state-store.js';
 import { silentLogger } from '../src/services/logger.js';
 import { AiRegistry, type AiProvider, type AiRequest } from '../src/services/ai/provider.js';
 import { StoryService } from '../src/modules/stories/story.service.js';
+import { passthroughPreparer } from '../src/modules/stories/media-prep.js';
 import { TimedMediaService } from '../src/modules/timed-media/timed-media.service.js';
 import { CleanerService } from '../src/modules/group-cleaner/cleaner.service.js';
 import { EditorService } from '../src/modules/ai-editor/editor.service.js';
@@ -113,12 +114,21 @@ export function setup(opts: { now?: Date } = {}) {
   const advance = (ms: number) => { current = new Date(current.getTime() + ms); };
   const repo = new MemoryRepository(now);
   const logger = silentLogger;
-  const stories = new StoryService({ repo, tg, queue, logger, ownerChatId: OWNER, now });
+  const stories = new StoryService({ repo, tg, queue, logger, ownerChatId: OWNER, now, preparer: passthroughPreparer });
   const media = new TimedMediaService({ repo, tg, queue, logger, ownerChatId: OWNER, now });
   const cleaner = new CleanerService({ repo, tg, logger, ownerId: OWNER, now });
   const editor = new EditorService({ repo, ai, logger });
   const router = new Router({ ownerId: OWNER, timezone: 'Asia/Tashkent', repo, tg, state, ai, stories, media, cleaner, editor, logger, now });
-  return { fake, tg, repo, queue, state, ai, claude, openai, stories, media, cleaner, editor, router, now, advance };
+  /** Runs every queued job once (like the BullMQ worker would). */
+  const drain = async (isFinalAttempt = true) => {
+    const { createProcessor } = await import('../src/jobs/processor.js');
+    const proc = createProcessor({ stories, media });
+    while (queue.jobs.length) {
+      const j = queue.jobs.shift()!;
+      await proc(j.name, j.data, { isFinalAttempt });
+    }
+  };
+  return { fake, tg, repo, queue, state, ai, claude, openai, stories, media, cleaner, editor, router, now, advance, drain };
 }
 
 export type Env = ReturnType<typeof setup>;

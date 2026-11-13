@@ -5,8 +5,8 @@ import { explainTelegramError, type TelegramClient } from '../../services/telegr
 import type { TgChatMemberUpdated, TgMessage } from '../../types/telegram.js';
 import { hasLink } from './link-detector.js';
 
-/** Telegram only lets bots delete messages younger than 48h — keep a 5-minute safety margin. */
-export const DELETE_WINDOW_MS = 48 * 3_600_000 - 5 * 60_000;
+/** Telegram only lets bots delete messages younger than 48h — keep a 15-minute safety margin. */
+export const DELETE_WINDOW_MS = 48 * 3_600_000 - 15 * 60_000;
 export const MAX_DELETE_COUNT = 1000;
 export const CONFIRM_TTL_MS = 10 * 60_000;
 const BATCH = 100;
@@ -71,6 +71,17 @@ export class CleanerService {
       track_messages: existing?.track_messages ?? true,
     });
     return 'registered';
+  }
+
+  /** A basic group was upgraded to a supergroup: Telegram gives it a new chat id. */
+  async migrate(oldChatId: number, newChatId: number): Promise<boolean> {
+    const { repo } = this.deps;
+    const g = await repo.getGroup(oldChatId);
+    if (!g) return false;
+    await repo.upsertGroup({ ...g, chat_id: newChatId });
+    await repo.deleteGroup(oldChatId); // old message ids are invalid in the new chat
+    await repo.log({ user_id: g.user_id, module: 'group-cleaner', action: 'migrated-to-supergroup', status: 'info', details: { from: oldChatId, to: newChatId } });
+    return true;
   }
 
   /** Stores metadata (no text) of a group message the bot received. */
@@ -144,12 +155,25 @@ export class CleanerService {
       await repo.updateDeleteTask(task.id, { status: 'cancelled', finished_at: this.now().toISOString(), error: 'Tasdiqlash muddati o‘tdi' });
       throw new Error('Tasdiqlash muddati (10 daqiqa) o‘tdi. Buyruqni qayta yuboring.');
     }
+    // Re-check rights and the 48h window at execution time (they may have changed since /delete).
+    const rights = await this.checkRights(task.chat_id);
+    if (!rights.ok) {
+      await repo.updateDeleteTask(task.id, { status: 'failed', finished_at: this.now().toISOString(), error: rights.reason ?? 'Huquq yo‘q' });
+      throw new Error(rights.reason ?? 'Huquq yo‘q');
+    }
     await repo.updateDeleteTask(task.id, { status: 'running', confirmed_at: this.now().toISOString() });
+    const since = new Date(this.now().getTime() - DELETE_WINDOW_MS);
+    const stillValid = new Set(
+      (await repo.listTrackedMessages(task.chat_id, { since, limit: MAX_DELETE_COUNT * 2 })).map((m) => m.message_id),
+    );
+    const ids = task.message_ids.filter((id) => stillValid.has(id));
+    const skipped = task.message_ids.length - ids.length;
 
     let deleted = 0;
     const errors: string[] = [];
-    for (let i = 0; i < task.message_ids.length; i += BATCH) {
-      const batch = task.message_ids.slice(i, i + BATCH);
+    if (skipped) errors.push(`${skipped} ta xabar 48 soatlik muddatdan chiqib qolgani yoki allaqachon o‘chirilgani uchun o‘tkazib yuborildi.`);
+    for (let i = 0; i < ids.length; i += BATCH) {
+      const batch = ids.slice(i, i + BATCH);
       try {
         await tg.deleteMessages(task.chat_id, batch);
         deleted += batch.length;
@@ -159,7 +183,7 @@ export class CleanerService {
         errors.push(explainTelegramError(err));
       }
     }
-    const status = errors.length === 0 ? 'done' : deleted > 0 ? 'partial' : 'failed';
+    const status = deleted === task.message_ids.length ? 'done' : deleted > 0 ? 'partial' : 'failed';
     const updated = await repo.updateDeleteTask(task.id, {
       status,
       deleted_count: deleted,

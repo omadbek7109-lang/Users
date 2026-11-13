@@ -3,8 +3,9 @@ import type { BusinessConnectionRow, StoryRow, UserRow } from '../../database/ty
 import type { JobQueue } from '../../services/queue.js';
 import { jobIds } from '../../services/queue.js';
 import type { Logger } from '../../services/logger.js';
-import { TelegramApiError, type TelegramClient, explainTelegramError } from '../../services/telegram-client.js';
+import { TelegramApiError, type StoryContent, type TelegramClient, explainTelegramError } from '../../services/telegram-client.js';
 import type { StoryDraft } from '../../services/state-store.js';
+import { MediaPrepError, type StoryMediaPreparer } from './media-prep.js';
 
 /** Official allowed values of postStory.active_period (seconds). */
 export const STORY_PERIODS = [21600, 43200, 86400, 172800] as const;
@@ -52,6 +53,7 @@ export class StoryService {
       queue: JobQueue;
       logger: Logger;
       ownerChatId: number;
+      preparer: StoryMediaPreparer;
       now?: () => Date;
     },
   ) {}
@@ -87,10 +89,11 @@ export class StoryService {
     return st.connection;
   }
 
-  private async createRow(user: UserRow, conn: BusinessConnectionRow, d: StoryDraft, at: Date): Promise<StoryRow> {
+  private async createAndEnqueue(user: UserRow, d: StoryDraft, at: Date, delayMs: number): Promise<StoryRow> {
     const errors = validateStoryDraft(d);
     if (errors.length) throw new StoryError(errors.join('\n'));
-    return this.deps.repo.createStory({
+    const conn = await this.requireConnection(user);
+    const row = await this.deps.repo.createStory({
       user_id: user.id,
       business_connection_id: conn.id,
       media_type: d.media.type,
@@ -103,40 +106,54 @@ export class StoryService {
       scheduled_at: at.toISOString(),
       status: 'scheduled',
     });
+    await this.deps.queue.enqueue('story.post', { id: row.id }, { jobId: jobIds.story(row.id), delayMs });
+    await this.deps.repo.log({ user_id: user.id, module: 'stories', action: delayMs ? 'schedule' : 'queue-now', status: 'ok', details: { story: row.id, at: row.scheduled_at } });
+    return row;
   }
 
+  /**
+   * "Post now" also goes through the queue: media conversion (H.265) can take minutes and must not
+   * block the update loop; the job survives restarts and the owner is notified about the result.
+   */
   async postNow(user: UserRow, draft: StoryDraft): Promise<StoryRow> {
-    const conn = await this.requireConnection(user);
-    const row = await this.createRow(user, conn, draft, this.now());
-    const res = await this.publish(row.id, { isFinalAttempt: true });
-    if (res.status !== 'posted') throw new StoryError(res.error ?? 'Story joylanmadi');
-    return res;
+    return this.createAndEnqueue(user, draft, this.now(), 0);
   }
 
   async schedule(user: UserRow, draft: StoryDraft, at: Date): Promise<StoryRow> {
     const delay = at.getTime() - this.now().getTime();
     if (delay < 30_000) throw new StoryError('Vaqt kamida 30 soniyadan keyin bo‘lishi kerak');
     if (delay > MAX_SCHEDULE_AHEAD_MS) throw new StoryError('Ko‘pi bilan 30 kun oldinga rejalashtirish mumkin');
-    const conn = await this.requireConnection(user);
-    const row = await this.createRow(user, conn, draft, at);
-    await this.deps.queue.enqueue('story.post', { id: row.id }, { jobId: jobIds.story(row.id), delayMs: delay });
-    await this.deps.repo.log({ user_id: user.id, module: 'stories', action: 'schedule', status: 'ok', details: { story: row.id, at: row.scheduled_at } });
-    return row;
+    return this.createAndEnqueue(user, draft, at, delay);
   }
 
-  /** Downloads the media and calls postStory. Used both for "post now" and by the scheduled job. */
+  /** Downloads, converts to the official story format and uploads. */
+  private async buildContent(row: StoryRow): Promise<StoryContent> {
+    const raw = await this.deps.tg.downloadFile(row.file_id);
+    if (row.media_type === 'photo') {
+      const p = await this.deps.preparer.photo(raw);
+      return { type: 'photo', data: p.data };
+    }
+    const v = await this.deps.preparer.video(raw, row.video_duration ?? undefined);
+    return { type: 'video', data: v.data, duration: v.duration, isAnimation: v.isAnimation };
+  }
+
+  /** Job entry point for story.post. Idempotent: anything but 'scheduled' is skipped. */
   async publish(storyId: string, ctx: { isFinalAttempt: boolean }): Promise<StoryRow> {
     const { repo, tg, logger } = this.deps;
     const row = await repo.getStory(storyId);
     if (!row) throw new StoryError('Story topilmadi');
-    if (row.status !== 'scheduled' && row.status !== 'posting') return row; // cancelled / already posted → idempotent skip
+    if (row.status !== 'scheduled') return row;
 
     await repo.updateStory(row.id, { status: 'posting', attempts: row.attempts + 1 });
+    let content: StoryContent;
     try {
-      const data = await tg.downloadFile(row.file_id);
-      const content = row.media_type === 'photo'
-        ? { type: 'photo' as const, data }
-        : { type: 'video' as const, data, duration: row.video_duration ?? undefined };
+      content = await this.buildContent(row);
+    } catch (err) {
+      // Conversion/download problems are not transient — fail immediately with the reason.
+      const explained = err instanceof MediaPrepError ? err.message : explainTelegramError(err);
+      return this.fail(row, explained, true);
+    }
+    try {
       const story = await tg.postStory(row.business_connection_id, content, {
         activePeriod: row.active_period,
         caption: row.caption ?? undefined,
@@ -153,22 +170,33 @@ export class StoryService {
       await repo.log({ user_id: row.user_id, module: 'stories', action: 'post', status: 'ok', details: { story: row.id, story_id: story.id } });
       return done;
     } catch (err) {
-      const explained = explainTelegramError(err);
       logger.warn('postStory failed', { story: row.id, err });
-      const failed = await repo.updateStory(row.id, { status: ctx.isFinalAttempt ? 'failed' : 'scheduled', error: explained });
-      await repo.log({ user_id: row.user_id, module: 'stories', action: 'post', status: 'error', details: { story: row.id, error: explained } });
-      if (!ctx.isFinalAttempt) throw err; // let the queue retry
-      return failed;
+      const retryable = !(err instanceof TelegramApiError) || err.errorCode === 429 || err.errorCode >= 500 || err.errorCode === 0;
+      const res = await this.fail(row, explainTelegramError(err), ctx.isFinalAttempt || !retryable);
+      if (res.status === 'scheduled') throw err; // let the queue retry
+      return res;
     }
   }
 
-  /** Job entry point: publishes and notifies the owner about the outcome. */
+  private async fail(row: StoryRow, reason: string, final: boolean): Promise<StoryRow> {
+    const updated = await this.deps.repo.updateStory(row.id, { status: final ? 'failed' : 'scheduled', error: reason });
+    await this.deps.repo.log({ user_id: row.user_id, module: 'stories', action: 'post', status: 'error', details: { story: row.id, error: reason, final } });
+    return updated;
+  }
+
+  /** Job wrapper: publishes and notifies the owner. */
   async runScheduled(storyId: string, ctx: { isFinalAttempt: boolean }): Promise<void> {
     const res = await this.publish(storyId, ctx);
+    const { tg, ownerChatId } = this.deps;
     if (res.status === 'posted') {
-      await this.deps.tg.sendMessage(this.deps.ownerChatId, `✅ Rejalashtirilgan story joylandi (ID: ${res.story_id}).`);
+      await tg.sendMessage(ownerChatId, `✅ Story joylandi (ID: ${res.story_id}).`, {
+        reply_markup: { inline_keyboard: [[
+          { text: '✏️ Captionni tahrirlash', callback_data: `sa:cap:${res.id}` },
+          { text: '🗑 O‘chirish', callback_data: `sa:del:${res.id}` },
+        ]] },
+      });
     } else if (res.status === 'failed') {
-      await this.deps.tg.sendMessage(this.deps.ownerChatId, `❌ Rejalashtirilgan story joylanmadi.\n${res.error ?? ''}`);
+      await tg.sendMessage(ownerChatId, `❌ Story joylanmadi.\n${res.error ?? ''}`);
     }
   }
 
@@ -195,29 +223,39 @@ export class StoryService {
     return res;
   }
 
-  /** editStory requires content, so the original media is re-uploaded with the new caption. */
-  async editCaption(user: UserRow, storyId: string, caption: string): Promise<StoryRow> {
+  /** Queues a caption edit (editStory requires content, so the media is re-converted and re-uploaded). */
+  async requestCaptionEdit(user: UserRow, storyId: string, caption: string): Promise<void> {
     const row = await this.ownRow(user, storyId);
     if (row.status !== 'posted' || !row.story_id) throw new StoryError('Faqat joylangan storyni tahrirlash mumkin');
     if (caption.length > STORY_CAPTION_MAX) throw new StoryError(`Caption ${STORY_CAPTION_MAX} belgidan oshmasin`);
+    await this.deps.queue.enqueue('story.edit', { id: row.id, caption }, { jobId: jobIds.storyEdit(row.id), delayMs: 0 });
+  }
+
+  /** Job entry point for story.edit. */
+  async runEdit(storyId: string, caption: string, ctx: { isFinalAttempt: boolean }): Promise<void> {
+    const { repo, tg, ownerChatId } = this.deps;
+    const row = await repo.getStory(storyId);
+    if (!row || row.status !== 'posted' || !row.story_id) return;
     try {
-      const data = await this.deps.tg.downloadFile(row.file_id);
-      const content = row.media_type === 'photo'
-        ? { type: 'photo' as const, data }
-        : { type: 'video' as const, data, duration: row.video_duration ?? undefined };
-      await this.deps.tg.editStory(row.business_connection_id, row.story_id, content, caption);
+      const content = await this.buildContent(row);
+      await tg.editStory(row.business_connection_id, row.story_id, content, caption);
     } catch (err) {
-      throw new StoryError(explainTelegramError(err));
+      const reason = err instanceof MediaPrepError ? err.message : explainTelegramError(err);
+      await repo.log({ user_id: row.user_id, module: 'stories', action: 'edit', status: 'error', details: { story: row.id, error: reason } });
+      const retryable = err instanceof TelegramApiError && (err.errorCode === 429 || err.errorCode >= 500);
+      if (retryable && !ctx.isFinalAttempt) throw err;
+      await tg.sendMessage(ownerChatId, `❌ Story tahrirlanmadi.\n${reason}`);
+      return;
     }
-    const res = await this.deps.repo.updateStory(row.id, { caption });
-    await this.deps.repo.log({ user_id: user.id, module: 'stories', action: 'edit', status: 'ok', details: { story: row.id } });
-    return res;
+    await repo.updateStory(row.id, { caption: caption || null });
+    await repo.log({ user_id: row.user_id, module: 'stories', action: 'edit', status: 'ok', details: { story: row.id } });
+    await tg.sendMessage(ownerChatId, '✅ Story caption yangilandi.');
   }
 
   /** Bot API has no "get story" method, so status = our record + computed expiry. */
   describe(row: StoryRow, fmt: (d: string) => string): string {
     const statusText: Record<StoryRow['status'], string> = {
-      scheduled: '📅 Rejalashtirilgan', posting: '⏳ Joylanmoqda', posted: '✅ Joylangan',
+      scheduled: '📅 Navbatda', posting: '⏳ Joylanmoqda', posted: '✅ Joylangan',
       failed: '❌ Xato', cancelled: '🚫 Bekor qilingan', deleted: '🗑 O‘chirilgan',
     };
     const lines = [`${statusText[row.status]} · ${row.media_type === 'photo' ? 'Rasm' : 'Video'} · ${row.active_period / 3600} soat`];

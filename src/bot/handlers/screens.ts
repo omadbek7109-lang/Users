@@ -132,7 +132,7 @@ export async function settingsScreen(c: BotContext, chatId: number, editMessageI
     lines.push(
       `  ${yn(r.can_manage_stories)} Stories boshqarish`,
       `  ${yn(r.can_reply)} Xabar yuborish (24 soat qoidasi)`,
-      `  ${yn(r.can_delete_outgoing_messages ?? r.can_delete_sent_messages)} O‘zi yuborganini o‘chirish`,
+      `  ${yn(r.can_delete_outgoing_messages)} O‘zi yuborganini o‘chirish`,
     );
   }
   const kb = settingsKeyboard(c.d.ai.available(), active);

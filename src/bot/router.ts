@@ -35,6 +35,7 @@ export class Router {
       if (u.business_connection) return await handleBusinessConnection(c, u.business_connection);
       if (u.business_message) return await handleBusinessMessage(c, u.business_message);
       if (u.my_chat_member) return void (await c.d.cleaner.onMembership(u.my_chat_member, await c.owner()));
+      if (u.message?.migrate_to_chat_id) return void (await c.d.cleaner.migrate(u.message.chat.id, u.message.migrate_to_chat_id));
 
       if (!owner) return await this.handleStranger(u);
 

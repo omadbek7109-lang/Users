@@ -28,7 +28,7 @@ export async function handleBusinessConnection(c: BotContext, bc: TgBusinessConn
           '💼 Telegram Business ulandi.',
           `${yn(r.can_manage_stories)} Stories boshqarish`,
           `${yn(r.can_reply)} Xabar yuborish`,
-          `${yn(r.can_delete_outgoing_messages ?? r.can_delete_sent_messages)} O‘zi yuborganini o‘chirish`,
+          `${yn(r.can_delete_outgoing_messages)} O‘zi yuborganini o‘chirish`,
           r.can_manage_stories ? '' : '\nStory joylash uchun bot huquqlarida "Manage stories"ni yoqing.',
         ].join('\n').trim()
       : '💼 Telegram Business ulanishi o‘chirildi.',

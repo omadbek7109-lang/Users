@@ -58,6 +58,8 @@ test('flow: business connect → photo → Story → options → post now', asyn
   await env.router.handle(callback(OWNER, 'sd:p:43200'));
   await env.router.handle(callback(OWNER, 'sd:page'));
   await env.router.handle(callback(OWNER, 'sd:now'));
+  assert.match(lastText(env, 'editMessageText'), /Tayyor bo‘lgach xabar beraman/);
+  await env.drain();
 
   const post = env.fake.byMethod('postStory')[0]!;
   assert.equal(post.params.active_period, 43200);

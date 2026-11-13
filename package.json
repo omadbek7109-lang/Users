@@ -6,20 +6,23 @@
   "type": "module",
   "main": "dist/index.js",
   "engines": {
-    "node": ">=20.10"
+    "node": ">=20.18"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "tsx --test tests/*.test.ts",
+    "test:integration": "tsx --test tests/integration/*.int.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "bullmq": "^5.12.0",
+    "ffmpeg-static": "^5.2.0",
     "grammy": "^1.36.0",
-    "ioredis": "^5.4.0"
+    "ioredis": "^5.4.0",
+    "sharp": "^0.35.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

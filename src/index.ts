@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { ConfigError, loadConfig } from './config/env.js';
 import { createLogger } from './services/logger.js';
 import { TelegramClient } from './services/telegram-client.js';
@@ -13,9 +14,13 @@ import { EditorService } from './modules/ai-editor/editor.service.js';
 import { Router, ALLOWED_UPDATES } from './bot/router.js';
 import { createBot } from './bot/create-bot.js';
 import { createProcessor } from './jobs/processor.js';
+import { reconcileJobs } from './jobs/reconcile.js';
+import { FfmpegSharpPreparer } from './modules/stories/media-prep.js';
 import { redactString } from './utils/redact.js';
 
 async function main() {
+  // Local development: read .env if present (production uses the host's environment variables).
+  if (existsSync('.env')) process.loadEnvFile('.env');
   let cfg;
   try {
     cfg = loadConfig();
@@ -39,19 +44,24 @@ async function main() {
   const ai = new AiRegistry(providers, cfg.aiProvider);
 
   const ownerChatId = cfg.ownerTelegramId; // private chat id == user id
-  const stories = new StoryService({ repo, tg, queue, logger, ownerChatId });
+  const ffmpegPath = process.env.FFMPEG_PATH?.trim() || ((await import('ffmpeg-static')) as unknown as { default: string | null }).default;
+  if (!ffmpegPath) throw new Error('ffmpeg topilmadi: FFMPEG_PATH ni kiriting');
+  const preparer = new FfmpegSharpPreparer(ffmpegPath);
+  const stories = new StoryService({ repo, tg, queue, logger, ownerChatId, preparer });
   const media = new TimedMediaService({ repo, tg, queue, logger, ownerChatId });
   const cleaner = new CleanerService({ repo, tg, logger, ownerId: cfg.ownerTelegramId });
   const editor = new EditorService({ repo, ai, logger });
 
   const me = await tg.getMe();
   logger.info('bot identity', { username: me.username });
-  await repo.ensureUser(cfg.ownerTelegramId);
+  const owner = await repo.ensureUser(cfg.ownerTelegramId);
 
   const router = new Router({
     ownerId: cfg.ownerTelegramId, timezone: cfg.timezone, repo, tg, state, ai, stories, media, cleaner, editor, logger,
   });
   const worker = startWorker(redis, createProcessor({ stories, media }), logger);
+  // Database is the source of truth: re-create any queue job Redis lost while the bot was down.
+  await reconcileJobs({ repo, queue, logger }, owner);
 
   await tg.call('setMyCommands', {
     commands: [

@@ -1,7 +1,8 @@
-export type JobName = 'story.post' | 'media.send' | 'media.delete';
+export type JobName = 'story.post' | 'story.edit' | 'media.send' | 'media.delete';
 
 export interface JobData {
   id: string; // scheduled_stories.id or media_tasks.id
+  caption?: string; // story.edit only
 }
 
 export interface EnqueueOptions {
@@ -11,13 +12,17 @@ export interface EnqueueOptions {
 
 /** Scheduler abstraction (BullMQ in production, MemoryQueue in tests). */
 export interface JobQueue {
+  /** Replaces any existing job with the same id. */
   enqueue(name: JobName, data: JobData, opts: EnqueueOptions): Promise<string>;
   remove(jobId: string): Promise<boolean>;
+  /** True if the job is waiting, delayed or currently running. */
+  has(jobId: string): Promise<boolean>;
 }
 
 /** Deterministic job ids — BullMQ custom ids must not contain ':' */
 export const jobIds = {
   story: (id: string) => `story-${id}`,
+  storyEdit: (id: string) => `story-edit-${id}`,
   mediaSend: (id: string) => `media-send-${id}`,
   mediaDelete: (id: string) => `media-del-${id}`,
 };
@@ -40,6 +45,9 @@ export class MemoryQueue implements JobQueue {
     const before = this.jobs.length;
     this.jobs = this.jobs.filter((j) => j.jobId !== jobId);
     return this.jobs.length < before;
+  }
+  async has(jobId: string) {
+    return this.jobs.some((j) => j.jobId === jobId);
   }
   take(jobId: string): QueuedJob | undefined {
     const j = this.jobs.find((x) => x.jobId === jobId);

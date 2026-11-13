@@ -8,6 +8,9 @@ export function createProcessor(deps: { stories: StoryService; media: TimedMedia
       case 'story.post':
         await deps.stories.runScheduled(data.id, ctx);
         return;
+      case 'story.edit':
+        await deps.stories.runEdit(data.id, data.caption ?? '', ctx);
+        return;
       case 'media.send':
         await deps.media.processSend(data.id, ctx);
         return;

@@ -59,13 +59,12 @@ export interface TgMessage {
   photo?: TgPhotoSize[];
   video?: TgVideo;
   new_chat_members?: TgUser[];
+  migrate_to_chat_id?: number;
 }
 
 export interface TgBusinessBotRights {
   can_reply?: boolean;
   can_read_messages?: boolean;
-  /** Deprecated since Bot API 9.1 — replaced by can_delete_outgoing_messages */
-  can_delete_sent_messages?: boolean;
   can_delete_outgoing_messages?: boolean;
   can_delete_all_messages?: boolean;
   can_manage_stories?: boolean;

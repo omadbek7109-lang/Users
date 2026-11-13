@@ -43,7 +43,7 @@ export interface SendOptions {
 
 export type StoryContent =
   | { type: 'photo'; data: Uint8Array }
-  | { type: 'video'; data: Uint8Array; duration?: number };
+  | { type: 'video'; data: Uint8Array; duration?: number; isAnimation?: boolean };
 
 export interface StoryOptions {
   activePeriod: number;
@@ -197,7 +197,12 @@ export class TelegramClient {
       };
     }
     return {
-      json: { type: 'video', video: 'attach://story_media', ...(content.duration ? { duration: content.duration } : {}) },
+      json: {
+        type: 'video',
+        video: 'attach://story_media',
+        ...(content.duration !== undefined ? { duration: content.duration } : {}),
+        ...(content.isAnimation ? { is_animation: true } : {}),
+      },
       file: { field: 'story_media', filename: 'story.mp4', data: content.data, mime: 'video/mp4' },
     };
   }

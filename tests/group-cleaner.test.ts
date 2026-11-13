@@ -132,3 +132,42 @@ test('security: bot leaves a group added by a stranger', async () => {
   assert.equal(ok, 'registered');
   assert.equal((await env.repo.getGroup(CHAT))!.bot_can_delete, true);
 });
+
+test('48h: messages that aged out between /delete and confirmation are skipped', async () => {
+  const env = setup();
+  const owner = await registerGroup(env);
+  // 3 messages ~47h40m old (inside the window now), 2 fresh ones
+  await trackN(env, 3, { ageMs: 47 * 3_600_000 + 40 * 60_000 });
+  for (let i = 4; i <= 5; i++) {
+    await env.cleaner.track({ message_id: i, date: Math.floor(env.now().getTime() / 1000) - 60, chat: { id: CHAT, type: 'supergroup' } });
+  }
+  const r = await env.cleaner.prepare(owner, CHAT, 'clear');
+  assert.ok(r.ok);
+  assert.equal(r.task.message_ids.length, 5);
+  env.advance(9 * 60_000); // owner confirms 9 minutes later → old ones are now past the safety window
+  const res = await env.cleaner.execute(owner, r.task.id);
+  assert.deepEqual(env.fake.byMethod('deleteMessages')[0]!.params.message_ids, [5, 4]);
+  assert.equal(res.task.status, 'partial');
+  assert.match(res.errors[0]!, /3 ta xabar 48 soatlik/);
+});
+
+test('permission: rights are re-checked at confirmation time', async () => {
+  const env = setup();
+  const owner = await registerGroup(env);
+  await trackN(env, 3);
+  const r = await env.cleaner.prepare(owner, CHAT, 'clear');
+  assert.ok(r.ok);
+  env.fake.handlers.getChatMember = () => ({ status: 'administrator', user: { id: BOT_ID, is_bot: true, first_name: 'B' }, can_delete_messages: false });
+  await assert.rejects(env.cleaner.execute(owner, r.task.id), /huquqi berilmagan/);
+  assert.equal(env.fake.byMethod('deleteMessages').length, 0);
+  assert.equal((await env.repo.getDeleteTask(r.task.id))!.status, 'failed');
+});
+
+test('supergroup migration moves settings to the new chat id', async () => {
+  const env = setup();
+  await registerGroup(env);
+  await trackN(env, 2);
+  await env.router.handle({ update_id: 1, message: { message_id: 99, date: 1, chat: { id: CHAT, type: 'group' }, from: { id: OWNER, is_bot: false, first_name: 'O' }, migrate_to_chat_id: -1009999 } });
+  assert.equal(await env.repo.getGroup(CHAT), null);
+  assert.equal((await env.repo.getGroup(-1009999))!.bot_can_delete, true);
+});
