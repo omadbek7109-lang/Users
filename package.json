@@ -14,7 +14,8 @@
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "tsx --test tests/*.test.ts",
-    "test:integration": "tsx --test tests/integration/*.int.test.ts"
+    "test:integration": "tsx --test tests/integration/*.int.test.ts",
+    "api-docs": "node scripts/print-api-docs.mjs postStory editStory deleteStory InputStoryContentPhoto InputStoryContentVideo deleteMessage deleteBusinessMessages BusinessConnection BusinessBotRights"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

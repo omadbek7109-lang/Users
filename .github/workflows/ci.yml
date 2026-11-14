@@ -28,7 +28,7 @@ jobs:
           node-version: 22
 
       - name: Install
-        run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+        run: npm ci --no-audit --no-fund
       - run: npm ls --depth=0
       - name: Typecheck (strict, src + tests)
         run: npm run typecheck
@@ -44,9 +44,6 @@ jobs:
           echo "$out"; test $code -eq 1; echo "$out" | grep -q "BOT_TOKEN kiritilmagan"
       - name: Production dependency audit (report only)
         run: npm audit --omit=dev || true
-      - name: Print lockfile (for committing)
-        if: hashFiles('package-lock.json') != '' && github.event_name == 'push'
-        run: echo "-----BEGIN LOCK-----"; base64 -w0 package-lock.json; echo; echo "-----END LOCK-----"
 
   integration:
     name: integration (real Redis/BullMQ, Postgres RLS, ffmpeg/sharp)
@@ -68,7 +65,7 @@ jobs:
         with:
           node-version: 22
       - name: Install
-        run: if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+        run: npm ci --no-audit --no-fund
       - name: ffprobe + psql for verification
         run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg postgresql-client >/dev/null
       - name: ffmpeg-static (production binary) has libx265

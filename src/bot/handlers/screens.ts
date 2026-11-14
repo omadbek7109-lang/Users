@@ -16,7 +16,7 @@ export async function storiesScreen(c: BotContext, chatId: number) {
   const lines = ['<b>📸 Stories Manager</b>', ''];
   if (st.problem) lines.push(`⚠️ ${escapeHtml(connectionProblemText(st.problem))}`);
   else lines.push('✅ Telegram Business ulangan, "Manage stories" huquqi bor.');
-  lines.push('', 'Story joylash uchun menga <b>rasm yoki video</b> yuboring.',
+  lines.push('', 'Story joylash uchun menga <b>rasm yoki video</b> yuboring (20 MB gacha). Rasm 1080×1920 ga, video H.265 720×1280 (60 s gacha) formatiga avtomatik o‘tkaziladi.',
     '<i>Eslatma: Bot API story privacy (kimlar ko‘radi) sozlamasini bermaydi — faqat "profilda saqlash" va "himoyalash" mavjud. Story ko‘rishlar sonini olish metodi ham yo‘q.</i>');
 
   const recent = await c.d.repo.listStories(owner.id, ['scheduled', 'posting', 'posted', 'failed'], 5);
